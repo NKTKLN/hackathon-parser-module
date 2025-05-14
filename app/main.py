@@ -23,10 +23,12 @@ async def main() -> None:
     logger.info(f"Using URL: {url}")
 
     # Example usage
-    parser = Parser(url)
+    parser = Parser(url, letters_count=1)
     letters_data = await parser.parse_letters()
-    with open("data.json", "w") as final:
-        json.dump(letters_data, final)
+    with open("data.json", "w", encoding="utf-8") as final:
+        data = [letter.to_dict() for letter in letters_data]
+        json.dump(data, final, ensure_ascii=False, indent=4)
+    await parser.shutdown()
 
 
 if __name__ == "__main__":

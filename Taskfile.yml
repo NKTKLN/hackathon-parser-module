@@ -1,7 +1,5 @@
 version: '3'
 
-# playwright install
-
 tasks:
   install:
     desc: Install dependencies using poetry
@@ -49,3 +47,8 @@ tasks:
     desc: Run the application
     cmds:
       - poetry run python -m app.main
+  
+  playwright-install:
+    desc: Install Playwright browsers
+    cmds:
+      - poetry run playwright install

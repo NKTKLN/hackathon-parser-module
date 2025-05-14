@@ -15,12 +15,19 @@ Features:
     - Извлечение структурированных данных писем
 """
 
+import asyncio
 import logging
 import re
 from typing import List, Optional
 
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.models import LetterData
 
@@ -33,7 +40,7 @@ class ParserBase:
 
     def __init__(self):
         """Инициализация базового парсера."""
-        self.browser = None # Браузер будет инициализирован при первом вызове
+        self.browser = None  # Браузер будет инициализирован при первом вызове
 
     async def start_browser(self):
         """Инициализирует браузер через Playwright, если он ещё не запущен.
@@ -47,6 +54,19 @@ class ParserBase:
             self.browser = await self.playwright.chromium.launch(headless=True)
         return self.browser
 
+    async def shutdown(self) -> None:
+        """Закрывает браузер и останавливает Playwright."""
+        if self.browser:
+            await self.browser.close()
+        if hasattr(self, "playwright"):
+            await self.playwright.stop()
+
+    @retry(
+        retry=retry_if_exception_type(Exception),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        stop=stop_after_attempt(3),
+        reraise=True,
+    )
     async def get_html(self, url: str) -> Optional[str]:
         """Получает HTML-содержимое указанной страницы.
 
@@ -148,7 +168,7 @@ class LetterIdsParser(ParserBase):
             logger.warning(f"Failed to parse page for letter IDs: {self.url}")
             return []
 
-        links = soup.find_all("a", class_="js-open_letter") # Находим ссылки с ID
+        links = soup.find_all("a", class_="js-open_letter")  # Находим ссылки с ID
         letter_ids = [id for link in links if (id := link.get("data-letter_id"))]
         logger.info(f"Found {len(letter_ids)} letter IDs on page {self.page}")
         return letter_ids
@@ -198,10 +218,17 @@ class LetterParser(ParserBase):
         date_element = letter_div.find_all("p")[0]
         raw_date = date_element.text.strip() if date_element else "unknown"
 
-        author_line = letter_div.find("p", string=lambda t: t and "От кого:" in t)
-        raw_author = (
-            author_line.text.replace("От кого:", "").strip() if author_line else "?"
-        )
+        author_line = letter_div.find("span", text="От кого:").parent
+        raw_author = author_line.get_text(strip=True).replace("От кого:", "").strip()
+
+        sender_line = letter_div.find("span", text="Откуда:").parent
+        raw_sender = sender_line.get_text(strip=True).replace("Откуда:", "").strip()
+
+        recipient_line = letter_div.find("span", text="Кому:").parent
+        raw_recipient = recipient_line.get_text(strip=True).replace("Кому:", "").strip()
+
+        dest_line = letter_div.find("span", text="Куда:").parent
+        raw_dest = dest_line.get_text(strip=True).replace("Куда:", "").strip()
 
         text_block = letter_div.find("div", class_="text")
         raw_text = text_block.get_text(separator="\n").strip() if text_block else ""
@@ -210,13 +237,23 @@ class LetterParser(ParserBase):
         date_pattern = r"\d{2}\.\d{2}\.\d{2,4}"
         date = raw_date if re.fullmatch(date_pattern, raw_date) else "unknown"
 
-        author_pattern = r"[А-ЯЁ][а-яё]+ [А-ЯЁ][а-яё]+ [А-ЯЁ][а-яё]+"
-        author = raw_author if re.fullmatch(author_pattern, raw_author) else "unknown"
-
+        author = raw_author if raw_author else "unknown"
+        recipient = raw_recipient if raw_recipient else "unknown"
+        sender = raw_sender if raw_sender else "unknown"
+        destination = raw_dest if raw_dest else "unknown"
         text = raw_text if raw_text else "unknown"
 
         logger.info(f"Successfully parsed letter ID: {letter_id}")
-        return LetterData(id=letter_id, date=date, author=author, text=text, url=url)
+        return LetterData(
+            id=letter_id,
+            date=date,
+            author=author,
+            text=text,
+            url=url,
+            sender=sender,
+            destination=destination,
+            recipient=recipient,
+        )
 
 
 class Parser:
@@ -245,6 +282,11 @@ class Parser:
         self.letter_ids_parser = LetterIdsParser(url, chunk_size)
         self.letter_parser = LetterParser(url)
 
+    async def shutdown(self) -> None:
+        """Закрывает браузеры и останавливает Playwright."""
+        await self.letter_ids_parser.shutdown()
+        await self.letter_parser.shutdown()
+
     async def parse_letters(self) -> List[LetterData]:
         """Выполняет полный процесс парсинга.
 
@@ -257,8 +299,10 @@ class Parser:
         logger.info("Starting to parse letters")
         letters_data = []
         total_parsed = 0
-
         page = 1
+
+        semaphore = asyncio.Semaphore(5)
+
         while total_parsed < self.letters_count:
             logger.info(f"Processing page {page}")
             self.letter_ids_parser.set_page(page)
@@ -274,13 +318,19 @@ class Parser:
                 remaining_slots = self.letters_count - total_parsed
                 letter_ids = letter_ids[:remaining_slots]
 
-            for letter_id in letter_ids:
-                letter_data = await self.letter_parser.get_letter_data(letter_id)
-                if not letter_data:
-                    continue
+            async def fetch_letter(letter_id: str):
+                async with semaphore:
+                    return await self.letter_parser.get_letter_data(letter_id)
 
-                letters_data.append(letter_data)
-                total_parsed += 1
+            tasks = [fetch_letter(letter_id) for letter_id in letter_ids]
+            results = await asyncio.gather(*tasks)
+
+            for letter in results:
+                if letter:
+                    letters_data.append(letter)
+                    total_parsed += 1
+
+            logger.info(f"Total parsed: {total_parsed}")
 
             page += 1
 
