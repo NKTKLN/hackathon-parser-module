@@ -1,5 +1,7 @@
 version: '3'
 
+# playwright install
+
 tasks:
   install:
     desc: Install dependencies using poetry
