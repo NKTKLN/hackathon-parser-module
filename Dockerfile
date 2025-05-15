@@ -27,6 +27,3 @@ RUN poetry run playwright install --with-deps
 
 # Указать переменные окружения (можно переопределить при запуске)
 ENV PYTHONUNBUFFERED=1
-
-# Запуск приложения
-CMD ["python", "-m", "app.main"]

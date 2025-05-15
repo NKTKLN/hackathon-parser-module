@@ -9,34 +9,47 @@ Functionality:
 - Запуск парсера по расписанию.
 """
 
+import asyncio
 import logging
 
-from rocketry import Rocketry  # type: ignore
-from rocketry.conds import every  # type: ignore
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
 
 from app.config import config
 from app.db.database import init_db
 from app.logger import setup_logger
 from app.parse import Parser
 
-app = Rocketry(execution="async")
-
 # Инициализация логгера
 logger = logging.getLogger(__name__)
 
 
-@app.task(every("12 hours"))
-async def scheduled_parsing() -> None:  # noqa: F401
-    """Задача парсинга писем каждые 12 часов."""
-    logger.info("Starting an letters parsing task...")
-    await init_db()
-
+async def scheduled_parsing() -> None:
+    """Задача парсинга писем по расписанию."""
+    logger.info("Starting letters parsing task...")
     parser = Parser(config.URL, letters_count=config.LETTERS_COUNT)
     await parser.parse_letters()
     await parser.shutdown()
     logger.info("Parsing task completed.")
 
 
-if __name__ == "__main__":
+async def main() -> None:
+    """Основная функция для запуска парсинга."""
     setup_logger()
-    app.run()
+    await init_db()
+
+    # Сначала запускаем задачу один раз сразу
+    await scheduled_parsing()
+
+    scheduler = AsyncIOScheduler()
+    # Запуск задачи каждые 12 часов
+    scheduler.add_job(
+        lambda: asyncio.create_task(scheduled_parsing()), "interval", hours=12
+    )
+    scheduler.start()
+
+    logger.info("Scheduler started. Running forever...")
+    await asyncio.Event().wait()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
