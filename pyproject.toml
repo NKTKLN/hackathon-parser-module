@@ -88,3 +88,4 @@ color = true
 
 [tool.vulture]
 exclude = [".git", "__pycache__", "build", "dist", ".venv", "tmp"]
+ignore_names = ["scheduled_parsing"]

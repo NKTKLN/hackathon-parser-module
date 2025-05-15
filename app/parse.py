@@ -330,6 +330,22 @@ class Parser:
                 letter_ids = letter_ids[:remaining_slots]
 
             async def fetch_letter(letter_id: str) -> Optional[LetterData]:
+                """Асинхронно получает данные одного письма по его идентификатору.
+
+                Использует семафор для ограничения количества одновременных запросов,
+                чтобы избежать перегрузки сети или блокировки сервером.
+
+                Args:
+                    letter_id (str): Уникальный идентификатор письма.
+
+                Returns:
+                    Optional[LetterData]: Объект с данными письма.
+                                        Возвращает None, если произошла ошибка.
+
+                Raises:
+                    Может выбросить исключение, если произошла ошибка сети или парсинга.
+                    Исключения должны быть обработаны на уровне вызывающей функции.
+                """
                 async with semaphore:
                     return await self.letter_parser.get_letter_data(letter_id)
 
