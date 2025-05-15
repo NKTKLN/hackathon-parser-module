@@ -30,7 +30,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from app.db.crud import create_letter, get_letters_count
+from app.db.crud import create_letter, get_letter_by_id, get_letters_count
 from app.db.models import LetterData
 
 # Инициализация логгера
@@ -328,6 +328,12 @@ class Parser:
             if self.letters_count + len(letter_ids) > total_parsed:
                 remaining_slots = self.letters_count - total_parsed
                 letter_ids = letter_ids[:remaining_slots]
+
+            for letter_id in letter_ids:
+                if get_letter_by_id(letter_id) is None:
+                    continue
+                logger.info(f"Letter with ID {letter_id} already exists. Skipping.")
+                letter_ids.remove(letter_id)
 
             async def fetch_letter(letter_id: str) -> Optional[LetterData]:
                 """Асинхронно получает данные одного письма по его идентификатору.

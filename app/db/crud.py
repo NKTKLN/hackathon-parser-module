@@ -69,3 +69,25 @@ async def get_letters_count() -> int:
     except SQLAlchemyError as e:
         logger.error(f"Database error while fetching letters count: {e}")
         raise
+
+
+async def get_letter_by_id(letter_id: str) -> Optional[LetterData]:
+    """Получить письмо по его ID.
+
+    Args:
+        letter_id (str): ID письма, которое нужно получить.
+
+    Returns:
+        Optional[LetterData]: Объект письма, если найдено, иначе None.
+    """
+    try:
+        async for session in get_session():
+            result = await session.execute(
+                select(LetterData).filter(LetterData.id == letter_id)
+            )
+            letter: Optional[LetterData] = result.scalars().first()
+            return letter
+        return None
+    except SQLAlchemyError as e:
+        logger.error(f"Database error while fetching letter by ID: {e}")
+        raise
