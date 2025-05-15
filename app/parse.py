@@ -18,6 +18,7 @@ Features:
 import asyncio
 import logging
 import re
+from datetime import datetime
 from typing import List, Optional
 
 from bs4 import BeautifulSoup, Tag
@@ -29,7 +30,8 @@ from tenacity import (
     wait_exponential,
 )
 
-from app.models import LetterData
+from app.db.crud import create_letter, get_letters_count
+from app.db.models import LetterData
 
 # Инициализация логгера
 logger = logging.getLogger(__name__)
@@ -40,7 +42,9 @@ class ParserBase:
 
     def __init__(self) -> None:
         """Инициализация базового парсера."""
-        self.browser: Browser  # Браузер будет инициализирован при первом вызове
+        self.browser: Optional[Browser] = (
+            None  # Браузер будет инициализирован при первом вызове
+        )
 
     async def start_browser(self) -> Browser:
         """Инициализирует браузер через Playwright, если он ещё не запущен.
@@ -222,37 +226,44 @@ class LetterParser(ParserBase):
 
         # Получаем сырые данные
         date_element = letter_div.find_all("p")[0]  # type: ignore[attr-defined]
-        raw_date = date_element.text.strip() if date_element else "unknown"
-
-        author_line = letter_div.find("span", text="От кого:").parent  # type: ignore[attr-defined]
-        raw_author = author_line.get_text(strip=True).replace("От кого:", "").strip()
-
-        sender_line = letter_div.find("span", text="Откуда:").parent  # type: ignore[attr-defined]
-        raw_sender = sender_line.get_text(strip=True).replace("Откуда:", "").strip()
-
-        recipient_line = letter_div.find("span", text="Кому:").parent  # type: ignore[attr-defined]
-        raw_recipient = recipient_line.get_text(strip=True).replace("Кому:", "").strip()
-
-        dest_line = letter_div.find("span", text="Куда:").parent  # type: ignore[attr-defined]
-        raw_dest = dest_line.get_text(strip=True).replace("Куда:", "").strip()
-
+        author_line = letter_div.find("span", text="От кого:")  # type: ignore[attr-defined]
+        sender_line = letter_div.find("span", text="Откуда:")  # type: ignore[attr-defined]
+        recipient_line = letter_div.find("span", text="Кому:")  # type: ignore[attr-defined]
+        destination_line = letter_div.find("span", text="Куда:")  # type: ignore[attr-defined]
         text_block = letter_div.find("div", class_="text")  # type: ignore[attr-defined]
-        raw_text = text_block.get_text(separator="\n").strip() if text_block else ""
 
         # Проверяем данные на корректность
         date_pattern = r"\d{2}\.\d{2}\.\d{2,4}"
-        date = raw_date if re.fullmatch(date_pattern, raw_date) else "unknown"
+        raw_date = date_element.text.strip() if date_element else "01.01.1970"
+        date = raw_date if re.fullmatch(date_pattern, raw_date) else "01.01.1970"
 
-        author = raw_author if raw_author else "unknown"
-        recipient = raw_recipient if raw_recipient else "unknown"
-        sender = raw_sender if raw_sender else "unknown"
-        destination = raw_dest if raw_dest else "unknown"
+        author = "unknown"
+        if author_line and author_line.parent:
+            raw_author = author_line.parent.get_text(separator=" ", strip=True)
+            author = raw_author.replace("От кого:", "").strip() or "unknown"
+
+        sender = "unknown"
+        if sender_line and sender_line.parent:
+            raw_sender = sender_line.parent.get_text(strip=True)
+            sender = raw_sender.replace("Откуда:", "").strip() or "unknown"
+
+        recipient = "unknown"
+        if recipient_line and recipient_line.parent:
+            raw_recipient = recipient_line.parent.get_text(separator=" ", strip=True)
+            recipient = raw_recipient.replace("Кому:", "").strip() or "unknown"
+
+        destination = "unknown"
+        if destination_line and destination_line.parent:
+            raw_dest = destination_line.parent.get_text(separator=" ", strip=True)
+            destination = raw_dest.replace("Куда:", "").strip() or "unknown"
+
+        raw_text = text_block.get_text(separator="\n").strip()
         text = raw_text if raw_text else "unknown"
 
         logger.info(f"Successfully parsed letter ID: {letter_id}")
         return LetterData(
             id=letter_id,
-            date=date,
+            date=datetime.strptime(date, "%d.%m.%Y"),
             author=author,
             text=text,
             url=url,
@@ -292,20 +303,15 @@ class Parser:
         await self.letter_ids_parser.shutdown()
         await self.letter_parser.shutdown()
 
-    async def parse_letters(self) -> List[LetterData]:
+    async def parse_letters(self) -> None:
         """Выполняет полный процесс парсинга.
 
         Последовательно получает ID писем с каждой страницы, а затем извлекает данные
         по каждому ID до достижения нужного количества.
-
-        Returns:
-            List[LetterData]: Список объектов LetterData с данными писем.
         """
         logger.info("Starting to parse letters")
-        letters_data = []
-        total_parsed = 0
         page = 1
-
+        total_parsed = await get_letters_count()
         semaphore = asyncio.Semaphore(5)
 
         while total_parsed < self.letters_count:
@@ -332,12 +338,7 @@ class Parser:
 
             for letter in results:
                 if letter:
-                    letters_data.append(letter)
-                    total_parsed += 1
-
-            logger.info(f"Total parsed: {total_parsed}")
+                    await create_letter(letter)
 
             page += 1
-
-        logger.info(f"Finished parsing. Total letters parsed: {total_parsed}")
-        return letters_data
+            total_parsed = await get_letters_count()
