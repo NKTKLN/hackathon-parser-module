@@ -41,7 +41,7 @@ tasks:
 
   check:
     desc: Full linting, audit run, and code checks
-    deps: [format, lint, audit, deadcode] # docstyle
+    deps: [format, lint, audit, docstyle, deadcode]
 
   run:
     desc: Run the application

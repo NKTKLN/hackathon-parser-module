@@ -20,8 +20,8 @@ import logging
 import re
 from typing import List, Optional
 
-from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright
+from bs4 import BeautifulSoup, Tag
+from playwright.async_api import Browser, async_playwright
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -38,17 +38,17 @@ logger = logging.getLogger(__name__)
 class ParserBase:
     """Базовый класс для парсеров. Содержит общую логику получения контента страниц."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Инициализация базового парсера."""
-        self.browser = None  # Браузер будет инициализирован при первом вызове
+        self.browser: Browser  # Браузер будет инициализирован при первом вызове
 
-    async def start_browser(self):
+    async def start_browser(self) -> Browser:
         """Инициализирует браузер через Playwright, если он ещё не запущен.
 
         Returns:
             browser: Запущенный экземпляр браузера.
         """
-        if self.browser is None:
+        if not self.browser:
             logger.info("Initializing browser via Playwright...")
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(headless=True)
@@ -121,7 +121,7 @@ class LetterIdsParser(ParserBase):
         url (str): Текущий URL с параметрами пагинации.
     """
 
-    def __init__(self, url: str, chunk_size: int = 24, page: int = 1):
+    def __init__(self, url: str, chunk_size: int = 24, page: int = 1) -> None:
         """Инициализация парсера Id писем.
 
         Args:
@@ -169,7 +169,13 @@ class LetterIdsParser(ParserBase):
             return []
 
         links = soup.find_all("a", class_="js-open_letter")  # Находим ссылки с ID
-        letter_ids = [id for link in links if (id := link.get("data-letter_id"))]
+        letter_ids = [
+            id
+            for link in links
+            if isinstance(link, Tag)
+            and (id := link.get("data-letter_id"))
+            and isinstance(id, str)
+        ]
         logger.info(f"Found {len(letter_ids)} letter IDs on page {self.page}")
         return letter_ids
 
@@ -183,7 +189,7 @@ class LetterParser(ParserBase):
         url (str): Базовый URL сайта, содержащего письма.
     """
 
-    def __init__(self, url: str):
+    def __init__(self, url: str) -> None:
         """Инициализация парсера писем.
 
         Args:
@@ -215,22 +221,22 @@ class LetterParser(ParserBase):
             return None
 
         # Получаем сырые данные
-        date_element = letter_div.find_all("p")[0]
+        date_element = letter_div.find_all("p")[0]  # type: ignore[attr-defined]
         raw_date = date_element.text.strip() if date_element else "unknown"
 
-        author_line = letter_div.find("span", text="От кого:").parent
+        author_line = letter_div.find("span", text="От кого:").parent  # type: ignore[attr-defined]
         raw_author = author_line.get_text(strip=True).replace("От кого:", "").strip()
 
-        sender_line = letter_div.find("span", text="Откуда:").parent
+        sender_line = letter_div.find("span", text="Откуда:").parent  # type: ignore[attr-defined]
         raw_sender = sender_line.get_text(strip=True).replace("Откуда:", "").strip()
 
-        recipient_line = letter_div.find("span", text="Кому:").parent
+        recipient_line = letter_div.find("span", text="Кому:").parent  # type: ignore[attr-defined]
         raw_recipient = recipient_line.get_text(strip=True).replace("Кому:", "").strip()
 
-        dest_line = letter_div.find("span", text="Куда:").parent
+        dest_line = letter_div.find("span", text="Куда:").parent  # type: ignore[attr-defined]
         raw_dest = dest_line.get_text(strip=True).replace("Куда:", "").strip()
 
-        text_block = letter_div.find("div", class_="text")
+        text_block = letter_div.find("div", class_="text")  # type: ignore[attr-defined]
         raw_text = text_block.get_text(separator="\n").strip() if text_block else ""
 
         # Проверяем данные на корректность
@@ -268,13 +274,12 @@ class Parser:
         letter_parser (LetterParser): Парсер для получения данных о письме.
     """
 
-    def __init__(self, url: str, letters_count: int = 50, chunk_size: int = 24):
+    def __init__(self, url: str, letters_count: int, chunk_size: int = 24) -> None:
         """Инициализация основного парсера.
 
         Args:
             url (str): Базовый URL сайта для парсинга писем.
             letters_count (int, optional): Необходимое количество писем для извлечения.
-                                           Default: 50.
             chunk_size (int, optional): Количество писем на одной странице. Default: 24.
         """
         self.url = url
@@ -318,7 +323,7 @@ class Parser:
                 remaining_slots = self.letters_count - total_parsed
                 letter_ids = letter_ids[:remaining_slots]
 
-            async def fetch_letter(letter_id: str):
+            async def fetch_letter(letter_id: str) -> Optional[LetterData]:
                 async with semaphore:
                     return await self.letter_parser.get_letter_data(letter_id)
 

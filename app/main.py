@@ -1,3 +1,19 @@
+"""Модуль запуска парсинга писем с сайта 'Письма Победы'.
+
+Этот модуль предназначен для асинхронного парсинга заданного количества писем
+с веб-сайта https://pismapobedy.ru/letters.  Результат парсинга сохраняется
+в JSON-файл `data.json` в текущей директории.
+
+Functionality:
+- Загрузка переменных окружения (LETTERS_COUNT).
+- Настройка логирования.
+- Инициализация и запуск парсера.
+- Сохранение спарсенных данных в формате JSON.
+
+Environment Variables:
+    LETTERS_COUNT (str): Количество писем для парсинга. По умолчанию — 50.
+"""
+
 import asyncio
 import json
 import logging
@@ -16,14 +32,14 @@ async def main() -> None:
     """Основная функция для запуска и настройки парсера."""
     setup_logger()
 
-    url = os.getenv("SITE_URL")
+    url = "https://pismapobedy.ru/letters"
+    letters_count = int(os.getenv("LETTERS_COUT", "50"))
     if not url:
-        logger.error("SITE_URL is not set in the environment variables.")
+        logger.error("LETTERS_COUT is not set in the environment variables.")
         return
-    logger.info(f"Using URL: {url}")
 
     # Example usage
-    parser = Parser(url, letters_count=1)
+    parser = Parser(url, letters_count=letters_count)
     letters_data = await parser.parse_letters()
     with open("data.json", "w", encoding="utf-8") as final:
         data = [letter.to_dict() for letter in letters_data]
