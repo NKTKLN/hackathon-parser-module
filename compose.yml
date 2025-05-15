@@ -1,0 +1,12 @@
+services:
+  parser:
+    build: .
+    command: poetry run python -m app.main
+    env_file:
+      - .env
+    environment:
+      # Playwright requires this for sandboxing in Docker
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    volumes:
+      - .:/app
+    restart: unless-stopped
