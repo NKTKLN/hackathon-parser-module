@@ -226,10 +226,10 @@ class LetterParser(ParserBase):
 
         # Получаем сырые данные
         date_element = letter_div.find_all("p")[0]  # type: ignore[attr-defined]
-        author_line = letter_div.find("span", text="От кого:")  # type: ignore[attr-defined]
-        sender_line = letter_div.find("span", text="Откуда:")  # type: ignore[attr-defined]
-        recipient_line = letter_div.find("span", text="Кому:")  # type: ignore[attr-defined]
-        destination_line = letter_div.find("span", text="Куда:")  # type: ignore[attr-defined]
+        author_line = letter_div.find("span", string="От кого:")  # type: ignore[attr-defined]
+        sender_line = letter_div.find("span", string="Откуда:")  # type: ignore[attr-defined]
+        recipient_line = letter_div.find("span", string="Кому:")  # type: ignore[attr-defined]
+        destination_line = letter_div.find("span", string="Куда:")  # type: ignore[attr-defined]
         text_block = letter_div.find("div", class_="text")  # type: ignore[attr-defined]
 
         # Проверяем данные на корректность

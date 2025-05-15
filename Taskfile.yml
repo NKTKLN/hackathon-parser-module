@@ -5,7 +5,7 @@ tasks:
     desc: Install dependencies using poetry
     cmds:
       - poetry install --no-root
-    
+
   precommit:
     desc: Install git hooks via pre-commit
     cmds:
@@ -43,11 +43,21 @@ tasks:
     desc: Full linting, audit run, and code checks
     deps: [format, lint, audit, docstyle, deadcode]
 
+  test:
+    desc: Run all tests with pytest
+    cmds:
+      - poetry run pytest tests/ -v
+
+  coverage:
+    desc: Run tests with coverage and show report
+    cmds:
+      - poetry run coverage run -m pytest tests/
+
   run:
     desc: Run the application
     cmds:
       - poetry run python -m app.main
-  
+
   playwright-install:
     desc: Install Playwright browsers
     cmds:

@@ -17,7 +17,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
 from app.config import config
 from app.db.database import init_db
 from app.logger import setup_logger
-from app.parse import Parser
+from app.parsers import Parser
 
 # Инициализация логгера
 logger = logging.getLogger(__name__)

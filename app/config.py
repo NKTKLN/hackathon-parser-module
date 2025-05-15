@@ -4,6 +4,7 @@
 Позволяет управлять параметрами базы данных, пагинацией и внешними ресурсами.
 """
 
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 
@@ -54,10 +55,8 @@ class Config(BaseSettings):
         )
 
     # Конфигурация загрузки переменных окружения
-    class Config:
-        """Настройки загрузки переменных окружения из файла .env."""
-
-        env_file = ".env"  # noqa: F841
+    model_config = ConfigDict(env_file=".env")  # type: ignore
+    _ = model_config  # type: ignore
 
 
 # Единственный экземпляр конфигурации, используемый в приложении
