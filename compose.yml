@@ -4,6 +4,4 @@ services:
     command: poetry run python -m app.main
     env_file:
       - .env
-    volumes:
-      - .:/app
     restart: unless-stopped
