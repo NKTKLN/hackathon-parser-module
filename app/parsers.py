@@ -257,6 +257,10 @@ class LetterParser(ParserBase):
             raw_dest = destination_line.parent.get_text(separator=" ", strip=True)
             destination = raw_dest.replace("Куда:", "").strip() or "unknown"
 
+        if text_block is None:
+            logger.warning(f"Text block not found for letter ID: {letter_id}")
+            return None
+
         raw_text = text_block.get_text(separator="\n").strip()
         text = raw_text if raw_text else "unknown"
 
@@ -360,7 +364,7 @@ class Parser:
             results = await asyncio.gather(*tasks)
 
             for letter in results:
-                if letter:
+                if letter is not None:
                     await create_letter(letter)
 
             page += 1
