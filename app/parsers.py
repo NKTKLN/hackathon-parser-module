@@ -329,11 +329,12 @@ class Parser:
                 remaining_slots = self.letters_count - total_parsed
                 letter_ids = letter_ids[:remaining_slots]
 
+            new_letter_ids: List[str] = []
             for letter_id in letter_ids:
-                if get_letter_by_id(letter_id) is None:
+                if await get_letter_by_id(letter_id) is None:
+                    new_letter_ids.append(letter_id)
                     continue
                 logger.info(f"Letter with ID {letter_id} already exists. Skipping.")
-                letter_ids.remove(letter_id)
 
             async def fetch_letter(letter_id: str) -> Optional[LetterData]:
                 """Асинхронно получает данные одного письма по его идентификатору.
@@ -355,7 +356,7 @@ class Parser:
                 async with semaphore:
                     return await self.letter_parser.get_letter_data(letter_id)
 
-            tasks = [fetch_letter(letter_id) for letter_id in letter_ids]
+            tasks = [fetch_letter(letter_id) for letter_id in new_letter_ids]
             results = await asyncio.gather(*tasks)
 
             for letter in results:
