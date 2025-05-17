@@ -42,9 +42,7 @@ async def main() -> None:
 
     scheduler = AsyncIOScheduler()
     # Запуск задачи каждые 12 часов
-    scheduler.add_job(
-        lambda: asyncio.create_task(scheduled_parsing()), "interval", hours=12
-    )
+    scheduler.add_job(scheduled_parsing, "interval", hours=12)
     scheduler.start()
 
     logger.info("Scheduler started. Running forever...")
